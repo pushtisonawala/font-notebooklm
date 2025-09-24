@@ -1,4 +1,6 @@
 import CreateNoteModal from '@/components/note/CreateNoteModal';
+import DiscoveryModal from '@/components/note/DiscoveryModal';
+import EditNoteModal from '@/components/note/EditNoteModal';
 import NoteCard from '@/components/note/NoteCard';
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
@@ -64,7 +66,9 @@ function NotePage() {
 
 
           <NoteCard notebooks={notebooks}/>
-          <CreateNoteModal></CreateNoteModal>
+          {/* <CreateNoteModal></CreateNoteModal> */}
+          {/* <DiscoveryModal></DiscoveryModal> */}
+          <EditNoteModal></EditNoteModal>
             </div>
         </main>
       

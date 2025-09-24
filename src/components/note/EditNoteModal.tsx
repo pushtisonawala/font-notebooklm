@@ -1,12 +1,13 @@
+
 import { Label } from "@radix-ui/react-label";
+
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import React from "react";
 import { Textarea } from "../ui/textarea";
-import { Search } from "lucide-react";
 import { BaseModal } from "../base/BaseModal";
 
-export const DiscoveryModal = () => {
+export const EditNoteModal = () => {
   const [open, setOpen] = React.useState(false)
   return (
 
@@ -23,10 +24,10 @@ export const DiscoveryModal = () => {
       <BaseModal
         open={open}
         onOpenChange={setOpen}
-        title="Discover Sources"
+        title="Edit Note"
         description=""
-        width={750}
-        height={500}
+        width={400}
+        height={250}
         footer={
           <>
             <Button variant="outline" onClick={() => setOpen(false)}>
@@ -38,19 +39,9 @@ export const DiscoveryModal = () => {
       >
 
         <div className="grid gap-3">
-          <div className="flex flex-col items-center justify-center">
-            <div className="mb-2">
-              <div className="bg-indigo-100 p-3 rounded-full">
-                <Search className="" size={20}></Search>
-              </div>
-
-            </div>
-            <div className="mb-4">
-              <p className="text-xl">What are you interested in?</p>
-            </div>
-          </div>
-          <Textarea 
-            className="resize-y min-h-[150px]" placeholder="Describe something you would like to learn about or search about" />
+          <Label htmlFor="name-1">Name</Label>
+          <Input id="name-1" name="name" defaultValue="Pedro Duarte" />
+         
         </div>
       </BaseModal>
     </div>
@@ -58,4 +49,4 @@ export const DiscoveryModal = () => {
   );
 }
 
-export default DiscoveryModal;
+export default EditNoteModal;

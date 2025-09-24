@@ -1,3 +1,5 @@
+import LeftPanel from '@/components/chat/LeftPanel'
+import RightPanel from '@/components/chat/RightPanel'
 import { useState } from 'react'
 
 
@@ -6,9 +8,13 @@ function ChatPage() {
 
   return (
     <>
-      <div>
-         <h1> chat page</h1>
-      </div>
+     <div className="flex h-screen gap-4">
+                   
+        <LeftPanel/>
+  <RightPanel/>
+
+                   
+                </div>
     
       
     </>
