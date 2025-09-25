@@ -13,6 +13,10 @@ export const router = createBrowserRouter([
             {
                 path:'login',
                  Component:lazy(() => import("@/pages/auth/LoginPage")),
+            },
+            {
+                path:'callback',
+                 Component:lazy(() => import("@/pages/auth/AuthCallbackPage")),
             }
          ]
     },

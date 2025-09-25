@@ -3,8 +3,8 @@ import { createSlice, configureStore } from '@reduxjs/toolkit'
 const chatSlice = createSlice({
     name: 'chat',
     initialState: {
-        leftPanelOpen: false,
-        rightPanelOpen: false,
+        leftPanelOpen: true,
+        rightPanelOpen: true,
         middlePanelDefaultWidth: 50
     },
     reducers: {
@@ -17,26 +17,26 @@ const chatSlice = createSlice({
             state.middlePanelDefaultWidth -= 21
         },
 
-         toggleLeftPanel: state => {
+        toggleLeftPanel: state => {
 
-            state.leftPanelOpen=!state.leftPanelOpen
-        },
-
-        
-         toggleRightPanel: state => {
-
-            state.rightPanelOpen=!state.rightPanelOpen
+            state.leftPanelOpen = !state.leftPanelOpen
         },
 
 
+        toggleRightPanel: state => {
 
-       
+            state.rightPanelOpen = !state.rightPanelOpen
+        },
 
-       
+
+
+
+
+
     }
 })
 
-export const { addExtraWidth,toggleLeftPanel,toggleRightPanel, reduceExtraWidth } = chatSlice.actions
+export const { addExtraWidth, toggleLeftPanel, toggleRightPanel, reduceExtraWidth } = chatSlice.actions
 
 
 

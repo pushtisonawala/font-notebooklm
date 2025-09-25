@@ -68,7 +68,9 @@ function NotePage() {
           <NoteCard notebooks={notebooks}/>
           {/* <CreateNoteModal></CreateNoteModal> */}
           {/* <DiscoveryModal></DiscoveryModal> */}
-          <EditNoteModal></EditNoteModal>
+          <EditNoteModal>
+          
+          </EditNoteModal>
             </div>
         </main>
       

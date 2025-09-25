@@ -13,15 +13,12 @@ const RightPanel = () => {
     function togglePanel() {
         if (rightPanelOpen) {
             dispatch(addExtraWidth())
-               dispatch(toggleRightPanel())
-
+            dispatch(toggleRightPanel())
 
         } else {
 
             dispatch(reduceExtraWidth())
-               dispatch(toggleRightPanel())
-
-
+            dispatch(toggleRightPanel())
         }
 
     }
