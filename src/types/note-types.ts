@@ -14,4 +14,4 @@ export type NoteType={
     createdAt:string
 }
 
-export type NoteServerData={notes:NoteType[]} & PaginationType
+export type NoteServerData={notes:NoteType[]} & {pagination?:PaginationType}

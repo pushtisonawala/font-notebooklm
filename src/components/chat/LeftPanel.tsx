@@ -3,6 +3,7 @@ import { addExtraWidth, reduceExtraWidth, toggleLeftPanel } from "@/store/chatSl
 import { useDispatch, useSelector } from "react-redux";
 import { Button } from "../ui/button";
 import { PanelLeft, Plus, Search } from "lucide-react";
+import { toggleAddSourceNoteModal } from "@/store/addSourceSlice";
 
 const LeftPanel = () => {
 
@@ -49,7 +50,7 @@ const LeftPanel = () => {
         {/* Buttons */}
       {leftPanelOpen ? (
         <div className="flex mt-3 justify-between">
-          <Button variant="outline" className="rounded-3xl px-5 py-4 w-40">
+          <Button onClick={()=>dispatch(toggleAddSourceNoteModal())} variant="outline" className="rounded-3xl px-5 py-4 w-40">
             <Plus size={18} /> Add
           </Button>
           <Button variant="outline" className="rounded-3xl px-5 py-4 w-40">

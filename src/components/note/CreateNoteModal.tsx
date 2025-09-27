@@ -1,30 +1,67 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BaseModal } from "../base/BaseModal"
 import { Button } from "../ui/button"
 import { ClipboardMinus, HardDrive, Link2, Newspaper, Search, Youtube } from "lucide-react";
+import type { AppDispatch, RootState } from "@/store";
+import { useDispatch, useSelector } from "react-redux";
+import { toggleAddSourceNoteModal } from "@/store/addSourceSlice";
+import useDrivePicker from 'react-google-drive-picker'
+import { developperKey, googleClientId } from "@/config/get-env";
+
+declare global {
+  interface Window {
+    gapi: any;
+    google: any;
+  }
+}
 
 const CreateNoteModal = () => {
-    const [open, setOpen] = useState(false)
+
+     const dispatch = useDispatch<AppDispatch>();
+    const { modal} = useSelector((state: RootState) => state.addSource);
+  const [pickerApiLoaded, setPickerApiLoaded] = useState(false);
+
+     const [openPicker, authResponse] = useDrivePicker();  
+  // const customViewsArray = [new google.picker.DocsView()]; // custom view
+  const handleOpenPicker = () => {
+   
+    openPicker({
+      clientId:googleClientId,
+      developerKey:developperKey,
+      viewId: "DOCS",
+      token:'ya29.a0AQQ_BDQGjFUO2cjV8nIBhRfPhrGi4Ao7m2VfntA4K7ILShWdmKCv3AdsN7rUJ0PBOnWqgy_rKw2fJl1qbCz0e9IDYhDlBBby2SnudO03PUmdk5n6-zWTA8TeJfHzsPKBLW4KwsxRz0UekYuxbpuCF0QQUEm1cyC_qT5yxKMm52fa6m9k3dJssX72nyb5EJRyrXShIT4aCgYKAagSARcSFQHGX2Mi0JyRXYsBmpEKio7yBldt_w0206', 
+      showUploadView: true,
+      showUploadFolders: true,
+      supportDrives: true,
+      multiselect: true,
+      // customViews: customViewsArray, // custom view
+      callbackFunction: (data) => {
+        if (data.action === 'cancel') {
+          console.log('User clicked cancel/close button')
+        }
+        console.log(data)
+      },
+    })
+  }
+
+
+
     return (
 
 
         <div>
 
 
-            <Button variant="outline" onClick={() => setOpen(true)}>
-                Open Dialog
-            </Button>
-
             <BaseModal
-                open={open}
-                onOpenChange={setOpen}
+                open={true}
+                onOpenChange={()=>dispatch(toggleAddSourceNoteModal())}
                 title="NotebookLM"
                 description=""
                 width={850}
                 height={600}
                 footer={
                     <>
-                        <Button variant="outline" onClick={() => setOpen(false)}>
+                        <Button variant="outline" onClick={()=>dispatch(toggleAddSourceNoteModal())}>
                             Cancel
                         </Button>
                         <Button>Save changes</Button>
@@ -40,6 +77,7 @@ const CreateNoteModal = () => {
                     </div>
                 </div>
                 <div>
+                
                     <p className="text-sm">Sources let NotebookLM base its responses on the information that matters most to you.
                         (Examples: marketing plans, course reading, research notes, meeting transcripts, sales documents, etc.)</p>
                 </div>
@@ -67,20 +105,20 @@ const CreateNoteModal = () => {
                     {/* Hidden file input */}
                     <input type="file" className="hidden" />
                 </div>
-                
+
                 {/* div card :actions buttons  */}
                 <div className="flex gap-2">
                     <div className="flex-1 rounded-md border border-gray-200 p-4">
                         <div className="mb-5 ">
                             <p className="text-gray-900">Google Workspace</p>
                         </div>
-                        <button className="flex gap-2 bg-slate-100 p-2 rounded-md text-sm text-blue-600 font-semibold">
+                        <button onClick={()=>handleOpenPicker()} className="flex cursor-pointer gap-2 bg-slate-100 p-2 rounded-md text-sm text-blue-600 font-semibold">
                             <HardDrive></HardDrive>
                             Google Drive
 
                         </button>
                     </div>
-  <div className="flex-1 rounded-md border border-gray-200 p-4">
+                    <div className="flex-1 rounded-md border border-gray-200 p-4">
                         <div className="flex gap-1 mb-5 ">
                             <Link2></Link2>
                             <p className="text-gray-900 font-semibold">Link</p>
@@ -94,7 +132,7 @@ const CreateNoteModal = () => {
                         </div>
                     </div>
 
-                    
+
                     <div className="flex-1 rounded-md border border-gray-200 p-4">
                         <div className="mb-5 ">
                             <p className="flex gap-2 font-semibold text-gray-900">
