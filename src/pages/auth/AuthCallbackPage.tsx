@@ -10,8 +10,8 @@ function AuthCallbackPage() {
 
             const data = await getAuthUserData()
             if (data) {
-                const { _id, name, email, image, ...resProps } = data
-                const user = { _id, name, email, image }
+                const { _id, name, email, image,googleAccessToken, ...resProps } = data
+                const user = { _id, name, email, image ,googleAccessToken}
                 localStorage.setItem('userData', JSON.stringify(user))
                 window.location.href='/notes'
 

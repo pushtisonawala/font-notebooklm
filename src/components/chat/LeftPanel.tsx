@@ -20,6 +20,8 @@ const LeftPanel = () => {
 
     }
   }
+
+  
     return ( <div
       className={`bg-white shadow-md h-full transition-all duration-300 ${
         leftPanelOpen
@@ -50,10 +52,10 @@ const LeftPanel = () => {
         {/* Buttons */}
       {leftPanelOpen ? (
         <div className="flex mt-3 justify-between">
-          <Button onClick={()=>dispatch(toggleAddSourceNoteModal())} variant="outline" className="rounded-3xl px-5 py-4 w-40">
+          <Button onClick={()=>dispatch(toggleAddSourceNoteModal())} variant="outline" className="rounded-3xl px-5 py-4 w-35">
             <Plus size={18} /> Add
           </Button>
-          <Button variant="outline" className="rounded-3xl px-5 py-4 w-40">
+          <Button variant="outline" className="rounded-3xl px-5 py-3 w-35">
             <Search size={18} /> Discover
           </Button>
         </div>

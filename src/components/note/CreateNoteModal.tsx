@@ -6,44 +6,51 @@ import type { AppDispatch, RootState } from "@/store";
 import { useDispatch, useSelector } from "react-redux";
 import { toggleAddSourceNoteModal } from "@/store/addSourceSlice";
 import useDrivePicker from 'react-google-drive-picker'
-import { developperKey, googleClientId } from "@/config/get-env";
+import { developerKey, googleClientId } from "@/config/get-env";
+import { getUserData } from "@/helper/getUserData";
+import { uploadPickedFiles } from "@/api/notes";
 
-declare global {
-  interface Window {
-    gapi: any;
-    google: any;
-  }
-}
+
+
+
 
 const CreateNoteModal = () => {
 
-     const dispatch = useDispatch<AppDispatch>();
-    const { modal} = useSelector((state: RootState) => state.addSource);
-  const [pickerApiLoaded, setPickerApiLoaded] = useState(false);
+    const dispatch = useDispatch<AppDispatch>();
+    const { modal } = useSelector((state: RootState) => state.addSource);
+    const userData = getUserData()
 
-     const [openPicker, authResponse] = useDrivePicker();  
-  // const customViewsArray = [new google.picker.DocsView()]; // custom view
-  const handleOpenPicker = () => {
-   
-    openPicker({
-      clientId:googleClientId,
-      developerKey:developperKey,
-      viewId: "DOCS",
-      token:'ya29.a0AQQ_BDQGjFUO2cjV8nIBhRfPhrGi4Ao7m2VfntA4K7ILShWdmKCv3AdsN7rUJ0PBOnWqgy_rKw2fJl1qbCz0e9IDYhDlBBby2SnudO03PUmdk5n6-zWTA8TeJfHzsPKBLW4KwsxRz0UekYuxbpuCF0QQUEm1cyC_qT5yxKMm52fa6m9k3dJssX72nyb5EJRyrXShIT4aCgYKAagSARcSFQHGX2Mi0JyRXYsBmpEKio7yBldt_w0206', 
-      showUploadView: true,
-      showUploadFolders: true,
-      supportDrives: true,
-      multiselect: true,
-      // customViews: customViewsArray, // custom view
-      callbackFunction: (data) => {
-        if (data.action === 'cancel') {
-          console.log('User clicked cancel/close button')
+    const [openPicker, data, authResponse] = useDrivePicker();
+    // const customViewsArray = [new google.picker.DocsView()]; // custom view
+    const handleOpenPicker = async () => {
+
+
+        openPicker({
+            clientId: googleClientId,
+            developerKey: developerKey,
+            viewId: "DOCS",
+            token: userData?.googleAccessToken,
+            showUploadView: true,
+            showUploadFolders: true,
+            supportDrives: true,
+            multiselect: true,
+        })
+
+        dispatch(toggleAddSourceNoteModal())
+
+
+    }
+
+    useEffect(() => {
+        // do anything with the selected/uploaded files
+        // if (data) {
+        //     data.docs.map(i => console.log(i.name))
+        // }
+        if (data) {
+            // console.log('docs : ', data?.docs)
+            uploadPickedFiles(data?.docs,userData?.googleAccessToken)
         }
-        console.log(data)
-      },
-    })
-  }
-
+    }, [data])
 
 
     return (
@@ -53,15 +60,15 @@ const CreateNoteModal = () => {
 
 
             <BaseModal
-                open={true}
-                onOpenChange={()=>dispatch(toggleAddSourceNoteModal())}
+                open={modal}
+                onOpenChange={() => dispatch(toggleAddSourceNoteModal())}
                 title="NotebookLM"
                 description=""
                 width={850}
                 height={600}
                 footer={
                     <>
-                        <Button variant="outline" onClick={()=>dispatch(toggleAddSourceNoteModal())}>
+                        <Button variant="outline" onClick={() => dispatch(toggleAddSourceNoteModal())}>
                             Cancel
                         </Button>
                         <Button>Save changes</Button>
@@ -77,7 +84,9 @@ const CreateNoteModal = () => {
                     </div>
                 </div>
                 <div>
-                
+
+
+
                     <p className="text-sm">Sources let NotebookLM base its responses on the information that matters most to you.
                         (Examples: marketing plans, course reading, research notes, meeting transcripts, sales documents, etc.)</p>
                 </div>
@@ -112,7 +121,7 @@ const CreateNoteModal = () => {
                         <div className="mb-5 ">
                             <p className="text-gray-900">Google Workspace</p>
                         </div>
-                        <button onClick={()=>handleOpenPicker()} className="flex cursor-pointer gap-2 bg-slate-100 p-2 rounded-md text-sm text-blue-600 font-semibold">
+                        <button onClick={() => handleOpenPicker()} className="flex cursor-pointer gap-2 bg-slate-100 p-2 rounded-md text-sm text-blue-600 font-semibold">
                             <HardDrive></HardDrive>
                             Google Drive
 

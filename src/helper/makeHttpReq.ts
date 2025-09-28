@@ -11,6 +11,7 @@ export function makeHttpReq<T>(verb: HttpVerbType, endpoint: string, input?: T) 
                 credentials: "include",
                 headers: {
                     accept: "application/json",
+                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify(input)
             })
