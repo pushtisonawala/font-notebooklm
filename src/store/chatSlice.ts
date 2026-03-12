@@ -5,7 +5,8 @@ const chatSlice = createSlice({
     initialState: {
         leftPanelOpen: true,
         rightPanelOpen: true,
-        middlePanelDefaultWidth: 50
+        middlePanelDefaultWidth: 50,
+        selectedFiles: [] // Array of selected file objects
     },
     reducers: {
         addExtraWidth: state => {
@@ -27,17 +28,12 @@ const chatSlice = createSlice({
 
             state.rightPanelOpen = !state.rightPanelOpen
         },
-
-
-
-
-
-
+        setSelectedFiles: (state, action) => {
+            state.selectedFiles = action.payload;
+        },
     }
 })
 
-export const { addExtraWidth, toggleLeftPanel, toggleRightPanel, reduceExtraWidth } = chatSlice.actions
-
-
+export const { addExtraWidth, toggleLeftPanel, toggleRightPanel, reduceExtraWidth, setSelectedFiles } = chatSlice.actions
 
 export default chatSlice.reducer

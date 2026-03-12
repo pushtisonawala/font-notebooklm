@@ -3,58 +3,87 @@ import { getUserData } from "@/helper/getUserData";
 import { makeHttpReq } from "@/helper/makeHttpReq";
 import type { NoteServerData } from "@/types/note-types";
 
-
 export async function getNotes(page = 1, search: string = ''): Promise<NoteServerData> {
-
-    const data = await makeHttpReq('GET', `notes?page=${page}&search=${search}`) as NoteServerData
-    return data
-
-
+  const data = await makeHttpReq('GET', `notes?page=${page}&search=${search}`) as NoteServerData
+  return data
 }
 
 
+// ✅ download file from backend using drive fileId
 const downloadFile = async (fileId: string) => {
 
-    console.log('file id : ',fileId)
-    const userId='68beb16d17836bc4d0e84bda'
-    const noteId='68d8d6e3308f4849551fe067'
+  const userData = getUserData()
 
-        // const data = await makeHttpReq('POST', `notes/drive-files`,{fileId,userId,noteId}) as NoteServerData
-  
-        const response = await fetch(`${apiUrl}/api/v1/notes/drive-files`, {
-          method: "POST",
-          credentials: "include",
-            headers: {
-    "Content-Type": "application/json", // ✅ important!
-  },
-          body: JSON.stringify({fileId,userId,noteId}),
-        });
-        const r=await response.json()
-   
-};
+  const userId = userData?._id
+  const noteId = userData?.activeNoteId   // or replace with correct noteId if needed
+
+  console.log("Downloading file:", fileId)
+
+  const response = await fetch(`${apiUrl}/api/v1/notes/drive-files`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fileId,
+      userId,
+      noteId
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error("Failed to download file")
+  }
+
+  const fileBlob = await response.blob()
+
+  return new File([fileBlob], "drive-file")
+}
 
 
-export const uploadPickedFiles = async (docs: any[], accessToken: string) => {
-    const formData = new FormData();
-    const userData = getUserData()
-    for (const doc of docs) {
-        const file = await downloadFile(doc.id);
-        // console.log('download :: :', file)
-        // formData.append("doc", file);
-        // formData.append("userId", userData?._id);
+
+// ✅ Upload selected google drive files
+export const uploadPickedFiles = async (docs: any[]) => {
+
+  const formData = new FormData()
+  const userData = getUserData()
+
+  for (const doc of docs) {
+    console.log("Doc selected:", doc)
+    let fileToUpload;
+    let fileName = doc.name;
+    if (doc.file) {
+      // Local file upload
+      fileToUpload = doc.file;
+    } else {
+      // Google Drive file
+      fileToUpload = await downloadFile(doc.id);
+    }
+    formData.append("files", fileToUpload, fileName);
+  }
+
+  formData.append("userId", userData?._id)
+
+  try {
+
+    const response = await fetch(`${apiUrl}/api/v1/notes`, {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    })
+
+    if (!response.ok) {
+      throw new Error("Upload failed")
     }
 
-    try {
-        // const response = await fetch(`${apiUrl}/api/v1/notes`, {
-        //   method: "POST",
-        //   body: formData,
-        // });
+    const data = await response.json()
 
-        // if (!response.ok) throw new Error(`Upload failed: ${response.statusText}`);
+    console.log("Upload success:", data)
 
-        // const data = await response.json();
-        // console.log("Upload successful:", data);
-    } catch (error) {
-        console.error("Error uploading files:", error);
-    }
-};
+  } catch (error) {
+
+    console.error("Upload error:", error)
+
+  }
+}

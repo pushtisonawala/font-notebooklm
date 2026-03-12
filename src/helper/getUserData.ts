@@ -2,21 +2,15 @@
 
 
 
-export function getUserData(){
-
+export function getUserData() {
     try {
-
-        const userData=localStorage.getItem('userData')
-
-        if(typeof userData!=='object'){
-            const parsedData=JSON.parse(userData)
-
-            return parsedData
+        const userData = localStorage.getItem('userData');
+        if (!userData) {
+            return null;
         }
-        
+        return JSON.parse(userData);
     } catch (error) {
-        
-
-        console.log('failed to parsed user data')
+        console.log('failed to parse user data');
+        return null;
     }
 }

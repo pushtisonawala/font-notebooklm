@@ -1,0 +1,2 @@
+Test PDF content for MongoDB GridFS storage test.
+This is a sample text file that will be used to test the file upload functionality.
