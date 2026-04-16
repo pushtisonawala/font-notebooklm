@@ -1,21 +1,26 @@
 // MiddlePannel.jsx
-import { useDispatch, useSelector } from "react-redux";
-import type { AppDispatch, RootState } from "@/store";
+import { useSelector } from "react-redux";
+import type { RootState } from "@/store";
 import { SendHorizonal } from "lucide-react";
 import { useState } from "react";
 import { apiUrl } from "@/config/get-env";
 import { getUserData } from "@/helper/getUserData";
 
+type SelectedSource = {
+    noteId?: string;
+};
+
 
 const MiddlePannel = () => {
 
-    // const dispatch = useDispatch<AppDispatch>();
     const { middlePanelDefaultWidth, selectedFiles } = useSelector((state: RootState) => state.chat);
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState([
         { role: "assistant", content: "Hello! I’m your AI assistant. How can I help you today?" },
     ]);
 
+
+    const selectedSources = selectedFiles as SelectedSource[];
 
     return (
         <div
@@ -68,13 +73,15 @@ const MiddlePannel = () => {
                         title="Send"
                         disabled={!selectedFiles || selectedFiles.length === 0 || !input.trim()}
                         onClick={async () => {
-                            // Add user message
                             setMessages(prev => [...prev, { role: "user", content: input }]);
                             const userMessage = input;
                             setInput("");
                             // Send to backend using the first selected file's noteId (for now, single note context)
-                            if (!selectedFiles || selectedFiles.length === 0) return;
-                            const noteId = selectedFiles[0].noteId;
+                            const noteId = selectedSources[0]?.noteId;
+                            if (!noteId) {
+                                setMessages(prev => [...prev, { role: "assistant", content: "[Error: No note is selected for this chat.]" }]);
+                                return;
+                            }
                             const userData = getUserData();
                             try {
                                 const res = await fetch(`${apiUrl}/api/v1/chat/${noteId}`, {
@@ -88,13 +95,15 @@ const MiddlePannel = () => {
                                 });
                                 if (!res.ok) {
                                     const err = await res.json();
-                                    setMessages(prev => [...prev, { role: "assistant", content: `[Error: ${err.error || 'Failed to get response'}]` }]);
+                                    const errorMessage = [err.error, err.details].filter(Boolean).join(" ");
+                                    setMessages(prev => [...prev, { role: "assistant", content: `[Error: ${errorMessage || 'Failed to get response'}]` }]);
                                     return;
                                 }
                                 const data = await res.json();
                                 setMessages(prev => [...prev, { role: "assistant", content: data.message || '[No response from AI]' }]);
                             } catch (err) {
-                                setMessages(prev => [...prev, { role: "assistant", content: `[Network error: ${err.message}]` }]);
+                                const networkMessage = err instanceof Error ? err.message : "Unknown network error";
+                                setMessages(prev => [...prev, { role: "assistant", content: `[Network error: ${networkMessage}]` }]);
                             }
                         }}
                     >
@@ -110,4 +119,3 @@ const MiddlePannel = () => {
 };
 
 export default MiddlePannel;
-

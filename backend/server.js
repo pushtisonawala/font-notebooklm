@@ -4,19 +4,153 @@ const cors = require('cors');
 const multer = require('multer');
 const { GridFSBucket } = require('mongodb');
 const { Readable } = require('stream');
+const path = require('path');
 const pdfParse = require('pdf-parse');
 const axios = require('axios');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-
-// Gemini API Key (replace with env var in production)
-const GEMINI_API_KEY = 'AIzaSyDoxT_-pVM2WEXqG1mudvIT7n7GJ4X3AjY';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || '')
+  .split(',')
+  .map(model => model.trim())
+  .filter(Boolean);
+const GEMINI_MAX_RETRIES = Math.max(0, Number.parseInt(process.env.GEMINI_MAX_RETRIES || '2', 10) || 0);
+const GEMINI_RETRY_DELAY_MS = Math.max(250, Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '1500', 10) || 1500);
+const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
 let gfsBucket;
+
+const getGeminiApiKey = () => process.env.GEMINI_API_KEY?.trim();
+
+const getGeminiModelList = () => [...new Set([GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS])];
+
+const getGeminiApiUrl = (model) => `${GEMINI_API_BASE_URL}/${model}:generateContent`;
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const isRetryableGeminiError = (err) => {
+  const upstreamStatus = err?.response?.status;
+  const upstreamErrorStatus = err?.response?.data?.error?.status;
+
+  return upstreamStatus === 429 || upstreamStatus === 503 || upstreamErrorStatus === 'RESOURCE_EXHAUSTED' || upstreamErrorStatus === 'UNAVAILABLE';
+};
+
+const requestGemini = async (contents) => {
+  const models = getGeminiModelList();
+  const triedModels = [];
+  let lastError;
+
+  for (const model of models) {
+    triedModels.push(model);
+
+    for (let attempt = 1; attempt <= GEMINI_MAX_RETRIES + 1; attempt += 1) {
+      try {
+        const response = await axios.post(
+          getGeminiApiUrl(model),
+          { contents },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': getGeminiApiKey()
+            },
+            timeout: 30000,
+          }
+        );
+
+        return { response, model, triedModels };
+      } catch (err) {
+        lastError = err;
+        const retryable = isRetryableGeminiError(err);
+        const canRetrySameModel = retryable && attempt <= GEMINI_MAX_RETRIES;
+
+        console.warn(`Gemini request failed for model ${model} (attempt ${attempt}/${GEMINI_MAX_RETRIES + 1})`, {
+          status: err?.response?.status,
+          errorStatus: err?.response?.data?.error?.status,
+          message: err?.response?.data?.error?.message || err.message,
+        });
+
+        if (canRetrySameModel) {
+          await sleep(GEMINI_RETRY_DELAY_MS * attempt);
+          continue;
+        }
+
+        if (!retryable) {
+          err.triedModels = triedModels;
+          throw err;
+        }
+
+        break;
+      }
+    }
+  }
+
+  if (lastError) {
+    lastError.triedModels = triedModels;
+    throw lastError;
+  }
+
+  throw new Error('Gemini request failed before any model could be tried.');
+};
+
+const getGeminiConfigError = () => {
+  const geminiApiKey = getGeminiApiKey();
+
+  if (!geminiApiKey) {
+    return `Missing GEMINI_API_KEY in ${path.join(__dirname, '.env')}. Add a valid Gemini API key and restart the server.`;
+  }
+
+  return null;
+};
+
+const formatGeminiError = (err) => {
+  const upstreamStatus = err?.response?.status;
+  const upstreamError = err?.response?.data?.error;
+  const upstreamMessage = upstreamError?.message || err.message || 'Unknown Gemini API error';
+  const triedModels = Array.isArray(err?.triedModels) ? err.triedModels : [];
+  const leakedKeyDetected =
+    upstreamStatus === 403 &&
+    typeof upstreamMessage === 'string' &&
+    upstreamMessage.toLowerCase().includes('reported as leaked');
+
+  if (leakedKeyDetected) {
+    return {
+      status: 503,
+      error: 'Gemini API key was rejected by Google because it was reported as leaked.',
+      details: `Generate a new Gemini API key, update ${path.join(__dirname, '.env')}, and restart the backend server.`,
+      upstreamStatus,
+    };
+  }
+
+  if (upstreamStatus === 401 || upstreamStatus === 403) {
+    return {
+      status: 503,
+      error: 'Gemini API request was rejected.',
+      details: 'Check that GEMINI_API_KEY is valid, active, and allowed to access the selected Gemini model.',
+      upstreamStatus,
+    };
+  }
+
+  if (upstreamStatus === 429 || upstreamStatus === 503) {
+    const modelsLabel = triedModels.length > 0 ? triedModels.join(', ') : GEMINI_MODEL;
+
+    return {
+      status: 503,
+      error: 'Gemini is temporarily overloaded.',
+      details: `The server retried the request${triedModels.length > 1 ? ' and tried fallback models' : ''}, but Gemini is still unavailable. Models tried: ${modelsLabel}. Please try again in a minute, or set GEMINI_FALLBACK_MODELS in ${path.join(__dirname, '.env')} to alternate models.`,
+      upstreamStatus,
+    };
+  }
+
+  return {
+    status: 502,
+    error: 'Gemini API error',
+    details: upstreamMessage,
+    upstreamStatus,
+  };
+};
 
 // Middleware
 app.use(cors({
@@ -413,20 +547,21 @@ app.post('/api/v1/chat/:noteId', async (req, res) => {
     // Call Gemini API
     let assistantMessage = '';
     try {
-      const geminiRes = await axios.post(
-        GEMINI_API_URL,
-        { contents },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': GEMINI_API_KEY
-          }
-        }
-      );
+      const geminiConfigError = getGeminiConfigError();
+      if (geminiConfigError) {
+        return res.status(503).json({ error: 'Gemini is not configured', details: geminiConfigError });
+      }
+
+      const { response: geminiRes, model: modelUsed } = await requestGemini(contents);
       assistantMessage = geminiRes.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from Gemini.';
+      console.log(`Gemini response generated with model ${modelUsed}`);
     } catch (err) {
-      console.error('Gemini API error:', err?.response?.data || err.message);
-      return res.status(500).json({ error: 'Gemini API error', details: err?.response?.data || err.message });
+      const formattedError = formatGeminiError(err);
+      console.error('Gemini API error:', {
+        status: err?.response?.status,
+        data: err?.response?.data || err.message,
+      });
+      return res.status(formattedError.status).json(formattedError);
     }
 
     // Save messages to database
