@@ -1,4 +1,4 @@
-import { createSlice, configureStore } from '@reduxjs/toolkit'
+import { createSlice } from '@reduxjs/toolkit'
 
 const chatSlice = createSlice({
     name: 'chat',
@@ -6,7 +6,8 @@ const chatSlice = createSlice({
         leftPanelOpen: true,
         rightPanelOpen: true,
         middlePanelDefaultWidth: 50,
-        selectedFiles: [] // Array of selected file objects
+        selectedFiles: [] as any[], // Array of selected file objects
+        activeStudioTool: null as string | null,
     },
     reducers: {
         addExtraWidth: state => {
@@ -31,9 +32,12 @@ const chatSlice = createSlice({
         setSelectedFiles: (state, action) => {
             state.selectedFiles = action.payload;
         },
+        setActiveStudioTool: (state, action) => {
+            state.activeStudioTool = action.payload;
+        },
     }
 })
 
-export const { addExtraWidth, toggleLeftPanel, toggleRightPanel, reduceExtraWidth, setSelectedFiles } = chatSlice.actions
+export const { addExtraWidth, toggleLeftPanel, toggleRightPanel, reduceExtraWidth, setSelectedFiles, setActiveStudioTool } = chatSlice.actions
 
 export default chatSlice.reducer

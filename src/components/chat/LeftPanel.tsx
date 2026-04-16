@@ -6,13 +6,11 @@ import { PanelLeft, Plus, Search } from "lucide-react";
 import { toggleAddSourceNoteModal } from "@/store/addSourceSlice";
 import { useEffect, useState } from "react";
 import { getNotes } from "@/api/notes";
-import { getUserData } from "@/helper/getUserData";
 
 const LeftPanel = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { leftPanelOpen } = useSelector((state: RootState) => state.chat);
   const [sources, setSources] = useState<any[]>([]);
-  const userData = getUserData();
   const selectedFiles = useSelector((state: RootState) => state.chat.selectedFiles);
 
   function togglePanel() {

@@ -9,13 +9,15 @@ const pdfParse = require('pdf-parse');
 const axios = require('axios');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
+const DEFAULT_GEMINI_FALLBACK_MODELS = ['gemini-2.5-flash-lite'];
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const GEMINI_FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || '')
+const GEMINI_FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || DEFAULT_GEMINI_FALLBACK_MODELS.join(','))
   .split(',')
   .map(model => model.trim())
   .filter(Boolean);
 const GEMINI_MAX_RETRIES = Math.max(0, Number.parseInt(process.env.GEMINI_MAX_RETRIES || '2', 10) || 0);
 const GEMINI_RETRY_DELAY_MS = Math.max(250, Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || '1500', 10) || 1500);
+const GEMINI_MAX_RETRY_WAIT_MS = Math.max(1000, Number.parseInt(process.env.GEMINI_MAX_RETRY_WAIT_MS || '12000', 10) || 12000);
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const app = express();
@@ -31,11 +33,51 @@ const getGeminiApiUrl = (model) => `${GEMINI_API_BASE_URL}/${model}:generateCont
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+const getGeminiRetryAfterMs = (err) => {
+  const retryAfterHeader = err?.response?.headers?.['retry-after'];
+  if (typeof retryAfterHeader === 'string') {
+    const retryAfterSeconds = Number.parseFloat(retryAfterHeader);
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+      return Math.ceil(retryAfterSeconds * 1000);
+    }
+  }
+
+  const upstreamMessage = err?.response?.data?.error?.message || err?.message || '';
+  const retryAfterMatch = typeof upstreamMessage === 'string'
+    ? upstreamMessage.match(/Please retry in\s+([\d.]+)s/i)
+    : null;
+
+  if (retryAfterMatch) {
+    const retryAfterSeconds = Number.parseFloat(retryAfterMatch[1]);
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+      return Math.ceil(retryAfterSeconds * 1000);
+    }
+  }
+
+  return null;
+};
+
+const getGeminiTransportErrorCode = (err) => err?.code || err?.cause?.code || null;
+
+const isGeminiDnsError = (err) => {
+  const errorCode = getGeminiTransportErrorCode(err);
+  return errorCode === 'ENOTFOUND' || errorCode === 'EAI_AGAIN';
+};
+
+const isGeminiTransientNetworkError = (err) => {
+  const errorCode = getGeminiTransportErrorCode(err);
+  return errorCode === 'ECONNRESET' || errorCode === 'ECONNABORTED' || errorCode === 'ETIMEDOUT' || errorCode === 'EAI_AGAIN';
+};
+
 const isRetryableGeminiError = (err) => {
   const upstreamStatus = err?.response?.status;
   const upstreamErrorStatus = err?.response?.data?.error?.status;
 
-  return upstreamStatus === 429 || upstreamStatus === 503 || upstreamErrorStatus === 'RESOURCE_EXHAUSTED' || upstreamErrorStatus === 'UNAVAILABLE';
+  return upstreamStatus === 429 ||
+    upstreamStatus === 503 ||
+    upstreamErrorStatus === 'RESOURCE_EXHAUSTED' ||
+    upstreamErrorStatus === 'UNAVAILABLE' ||
+    isGeminiTransientNetworkError(err);
 };
 
 const requestGemini = async (contents) => {
@@ -65,20 +107,35 @@ const requestGemini = async (contents) => {
         lastError = err;
         const retryable = isRetryableGeminiError(err);
         const canRetrySameModel = retryable && attempt <= GEMINI_MAX_RETRIES;
+        const retryAfterMs = getGeminiRetryAfterMs(err);
+        const isQuotaError = err?.response?.status === 429 || err?.response?.data?.error?.status === 'RESOURCE_EXHAUSTED';
+        const shouldTryNextModelImmediately = isQuotaError && models.length > triedModels.length;
+        const backoffMs = retryAfterMs ?? GEMINI_RETRY_DELAY_MS * attempt;
 
         console.warn(`Gemini request failed for model ${model} (attempt ${attempt}/${GEMINI_MAX_RETRIES + 1})`, {
           status: err?.response?.status,
           errorStatus: err?.response?.data?.error?.status,
+          code: getGeminiTransportErrorCode(err),
           message: err?.response?.data?.error?.message || err.message,
+          retryAfterMs,
         });
 
+        if (shouldTryNextModelImmediately) {
+          break;
+        }
+
         if (canRetrySameModel) {
-          await sleep(GEMINI_RETRY_DELAY_MS * attempt);
+          if (backoffMs > GEMINI_MAX_RETRY_WAIT_MS) {
+            break;
+          }
+
+          await sleep(backoffMs);
           continue;
         }
 
         if (!retryable) {
           err.triedModels = triedModels;
+          err.retryAfterMs = retryAfterMs;
           throw err;
         }
 
@@ -89,6 +146,7 @@ const requestGemini = async (contents) => {
 
   if (lastError) {
     lastError.triedModels = triedModels;
+    lastError.retryAfterMs = getGeminiRetryAfterMs(lastError);
     throw lastError;
   }
 
@@ -105,11 +163,88 @@ const getGeminiConfigError = () => {
   return null;
 };
 
+const NOTEBOOK_TOOL_CONFIG = {
+  'Audio Overview': {
+    instruction: 'Summarize the notebook content as a spoken-style conversational script between two hosts. Use stage directions in parentheses and format spoken lines as "Host 1: ..." and "Host 2: ...".',
+    aliases: ['audio overview', 'audio summary', 'spoken summary', 'podcast script'],
+  },
+  'Video Overview': {
+    instruction: 'Create a structured outline for a short explainer video. Format each scene as "Scene N: ...", followed by "Scene Description:", "Key Visuals:", and "Narration:".',
+    aliases: ['video overview', 'video summary', 'explainer video'],
+  },
+  'Mind Map': {
+    instruction: 'Extract the main topic and subtopics and output a hierarchical structure with the central topic first, then branches and leaves as indented text.',
+    aliases: ['mind map', 'mindmap'],
+  },
+  'Reports': {
+    instruction: 'Write a clean report using the section headings "Executive Summary", "Key Findings", "Details", and "Conclusion".',
+    aliases: ['report', 'reports', 'write a report'],
+  },
+  'Flashcards': {
+    instruction: 'Generate 10 to 20 flashcards. Each flashcard must use exactly two lines: "Q: ..." and "A: ...".',
+    aliases: ['flashcard', 'flashcards', 'flash cards'],
+  },
+  'Quiz': {
+    instruction: 'Create a 5 to 10 question multiple-choice quiz. Format each question as "1. ...", then options "A. ...", "B. ...", "C. ...", "D. ...", and end with "Correct Answer: X".',
+    aliases: ['quiz', 'quiz me', 'multiple choice quiz'],
+  },
+};
+
+const normalizeNotebookTool = (value) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value.trim().toLowerCase();
+  return Object.keys(NOTEBOOK_TOOL_CONFIG).find((tool) => tool.toLowerCase() === normalizedValue) || null;
+};
+
+const detectNotebookToolFromMessage = (message) => {
+  if (typeof message !== 'string') {
+    return null;
+  }
+
+  const normalizedMessage = message.toLowerCase();
+
+  return Object.entries(NOTEBOOK_TOOL_CONFIG).find(([, config]) =>
+    config.aliases.some((alias) => normalizedMessage.includes(alias))
+  )?.[0] || null;
+};
+
+const buildNotebookSystemPrompt = ({ sourcesContext, activeTool }) => {
+  const toolDescriptions = Object.entries(NOTEBOOK_TOOL_CONFIG)
+    .map(([tool, config]) => `- ${tool}: ${config.instruction}`)
+    .join('\n');
+
+  const activeToolInstruction = activeTool
+    ? `The user selected the "${activeTool}" tool. Activate ONLY that tool's behavior for this response.\nRequired format for this response: ${NOTEBOOK_TOOL_CONFIG[activeTool].instruction}`
+    : 'If the user asks for one of the tools below, activate ONLY that tool\'s behavior. If no tool is requested, answer normally using only the notebook content.';
+
+  return `You are a smart Notebook assistant. The user uploads documents, PDFs, or pasted text as their notebook.
+
+${activeToolInstruction}
+
+Available tools:
+${toolDescriptions}
+
+Rules:
+- Always base your output strictly on the notebook content provided.
+- Keep responses clear, concise, and well-formatted.
+- If the answer cannot be found in the notebook, say so clearly.
+- If no notebook content has been shared yet, ask the user to upload or paste their content first.
+- The user may ask in natural language such as "give me flashcards", "make a mind map", or "quiz me".
+
+NOTEBOOK CONTENT:
+${sourcesContext}`;
+};
+
 const formatGeminiError = (err) => {
   const upstreamStatus = err?.response?.status;
   const upstreamError = err?.response?.data?.error;
   const upstreamMessage = upstreamError?.message || err.message || 'Unknown Gemini API error';
   const triedModels = Array.isArray(err?.triedModels) ? err.triedModels : [];
+  const retryAfterMs = typeof err?.retryAfterMs === 'number' ? err.retryAfterMs : null;
+  const transportErrorCode = getGeminiTransportErrorCode(err);
   const leakedKeyDetected =
     upstreamStatus === 403 &&
     typeof upstreamMessage === 'string' &&
@@ -133,13 +268,43 @@ const formatGeminiError = (err) => {
     };
   }
 
-  if (upstreamStatus === 429 || upstreamStatus === 503) {
+  if (isGeminiDnsError(err)) {
+    return {
+      status: 503,
+      error: 'Cannot resolve the Gemini API host.',
+      details: `The backend could not resolve generativelanguage.googleapis.com (${transportErrorCode}). Check your internet connection, DNS settings, VPN/proxy, or firewall, then restart the request.`,
+      upstreamStatus,
+    };
+  }
+
+  if (isGeminiTransientNetworkError(err)) {
+    return {
+      status: 503,
+      error: 'Temporary network error while reaching Gemini.',
+      details: `The backend could not complete the network request to Gemini (${transportErrorCode || 'network error'}). Please try again shortly and check local connectivity if it keeps happening.`,
+      upstreamStatus,
+    };
+  }
+
+  if (upstreamStatus === 429) {
+    const modelsLabel = triedModels.length > 0 ? triedModels.join(', ') : GEMINI_MODEL;
+    const retryAfterSeconds = retryAfterMs ? (retryAfterMs / 1000).toFixed(1) : null;
+
+    return {
+      status: 503,
+      error: 'Gemini quota or rate limit reached.',
+      details: `Models tried: ${modelsLabel}.${retryAfterSeconds ? ` Retry after about ${retryAfterSeconds} seconds.` : ''} You can reduce repeat clicks, wait for the quota window to reset, or set GEMINI_FALLBACK_MODELS in ${path.join(__dirname, '.env')} to alternate models such as gemini-2.5-flash-lite.`,
+      upstreamStatus,
+    };
+  }
+
+  if (upstreamStatus === 503) {
     const modelsLabel = triedModels.length > 0 ? triedModels.join(', ') : GEMINI_MODEL;
 
     return {
       status: 503,
       error: 'Gemini is temporarily overloaded.',
-      details: `The server retried the request${triedModels.length > 1 ? ' and tried fallback models' : ''}, but Gemini is still unavailable. Models tried: ${modelsLabel}. Please try again in a minute, or set GEMINI_FALLBACK_MODELS in ${path.join(__dirname, '.env')} to alternate models.`,
+      details: `The server retried the request${triedModels.length > 1 ? ' and tried fallback models' : ''}, but Gemini is still unavailable. Models tried: ${modelsLabel}. Please try again in a minute, or set GEMINI_FALLBACK_MODELS in ${path.join(__dirname, '.env')} to alternate models such as gemini-2.5-flash-lite.`,
       upstreamStatus,
     };
   }
@@ -493,7 +658,8 @@ app.get('/api/v1/files/:fileId', async (req, res) => {
 app.post('/api/v1/chat/:noteId', async (req, res) => {
   try {
     const { noteId } = req.params;
-    const { message, userId } = req.body;
+    const { message, userId, selectedTool } = req.body;
+    const activeTool = normalizeNotebookTool(selectedTool) || detectNotebookToolFromMessage(message);
 
     if (!message) {
       return res.status(400).json({ error: 'message is required' });
@@ -516,7 +682,7 @@ app.post('/api/v1/chat/:noteId', async (req, res) => {
       });
     }
 
-    console.log(`💬 Chat request for note ${noteId}: "${message.substring(0, 50)}..."`);
+    console.log(`💬 Chat request for note ${noteId}: "${message.substring(0, 50)}..."`, activeTool ? `(tool: ${activeTool})` : '');
 
     // Get chat history for context
     const chatHistory = await ChatMessage.find({ noteId })
@@ -529,7 +695,7 @@ app.post('/api/v1/chat/:noteId', async (req, res) => {
     // System prompt as first user message
     contents.push({
       role: 'user',
-      parts: [{ text: `You are a helpful AI assistant. Answer questions based ONLY on the following source documents. If the answer cannot be found in the sources, say so clearly.\n\nSOURCES:\n${sourcesContext}\n\nRemember: Base your answers strictly on the provided sources. Cite which source you're referencing when possible.` }]
+      parts: [{ text: buildNotebookSystemPrompt({ sourcesContext, activeTool }) }]
     });
     // Add chat history
     chatHistory.forEach(msg => {
@@ -582,7 +748,8 @@ app.post('/api/v1/chat/:noteId', async (req, res) => {
     res.json({
       success: true,
       message: assistantMessage,
-      sourcesUsed: note.files.length
+      sourcesUsed: note.files.length,
+      toolUsed: activeTool,
     });
   } catch (error) {
     console.error('Chat error:', error);

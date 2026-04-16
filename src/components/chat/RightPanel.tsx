@@ -1,14 +1,25 @@
 
 import { PanelRight, Sparkles, Video, GitBranch, FileText, Star, HelpCircle, Pencil } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "../ui/button";
 import { useDispatch, useSelector } from "react-redux";
-import type { AppDispatch, RootState } from "@/stores";
-import { addExtraWidth, reduceExtraWidth, toggleRightPanel } from "@/store/chatSlice";
+import type { AppDispatch, RootState } from "@/store";
+import { addExtraWidth, reduceExtraWidth, setActiveStudioTool, toggleRightPanel } from "@/store/chatSlice";
+import { STUDIO_TOOLS, type StudioToolLabel } from "@/config/studio-tools";
+
+const TOOL_ICONS: Record<StudioToolLabel, ReactNode> = {
+    "Audio Overview": <Sparkles />,
+    "Video Overview": <Video />,
+    "Mind Map": <GitBranch />,
+    "Reports": <FileText />,
+    "Flashcards": <Star />,
+    "Quiz": <HelpCircle />,
+};
 
 const RightPanel = () => {
 
     const dispatch = useDispatch<AppDispatch>();
-    const { rightPanelOpen } = useSelector((state: RootState) => state.chat);
+    const { rightPanelOpen, activeStudioTool } = useSelector((state: RootState) => state.chat);
 
     function togglePanel() {
         if (rightPanelOpen) {
@@ -44,12 +55,16 @@ const RightPanel = () => {
 
             {/* Content */}
             <div className={`mt-4 grid ${rightPanelOpen ? "grid-cols-2 gap-4" : "grid-cols-1 gap-3"}`}>
-                <PanelItem rightPanelOpen={rightPanelOpen} icon={<Sparkles />} label="Audio Overview" />
-                <PanelItem rightPanelOpen={rightPanelOpen} icon={<Video />} label="Video Overview" />
-                <PanelItem rightPanelOpen={rightPanelOpen} icon={<GitBranch />} label="Mind Map" />
-                <PanelItem rightPanelOpen={rightPanelOpen} icon={<FileText />} label="Reports" />
-                <PanelItem rightPanelOpen={rightPanelOpen} icon={<Star />} label="Flashcards" />
-                <PanelItem rightPanelOpen={rightPanelOpen} icon={<HelpCircle />} label="Quiz" />
+                {STUDIO_TOOLS.map((tool) => (
+                    <PanelItem
+                        key={tool.label}
+                        rightPanelOpen={rightPanelOpen}
+                        icon={TOOL_ICONS[tool.label]}
+                        label={tool.label}
+                        isActive={activeStudioTool === tool.label}
+                        onClick={() => dispatch(setActiveStudioTool(activeStudioTool === tool.label ? null : tool.label))}
+                    />
+                ))}
             </div>
 
             {/* Bottom note button */}
@@ -67,16 +82,37 @@ const RightPanel = () => {
     );
 };
 
-const PanelItem = ({ icon, label, rightPanelOpen }: { icon: React.ReactNode; label: string; rightPanelOpen: boolean }) => {
+const PanelItem = ({
+    icon,
+    label,
+    rightPanelOpen,
+    isActive,
+    onClick,
+}: {
+    icon: ReactNode;
+    label: StudioToolLabel;
+    rightPanelOpen: boolean;
+    isActive: boolean;
+    onClick: () => void;
+}) => {
     return (
-        <div
-            className={`flex items-center justify-center  rounded-md bg-gray-100 hover:bg-gray-200 cursor-pointer transition ${rightPanelOpen ? "flex-col p-4 h-24" : "p-2 h-14"
-
-                }  ${label == 'Mind Map' ? 'bg-orange-50' : ''} `}
+        <button
+            type="button"
+            onClick={onClick}
+            aria-pressed={isActive}
+            className={`flex items-center justify-center rounded-md border cursor-pointer transition text-left ${
+                rightPanelOpen ? "flex-col p-4 h-24" : "p-2 h-14"
+            } ${
+                isActive
+                    ? "bg-indigo-50 border-indigo-400 text-indigo-700"
+                    : label === "Mind Map"
+                        ? "bg-orange-50 border-orange-100 hover:bg-orange-100"
+                        : "bg-gray-100 border-transparent hover:bg-gray-200"
+            }`}
         >
             {icon}
             {rightPanelOpen && <span className="mt-2 text-sm font-medium text-gray-700">{label}</span>}
-        </div>
+        </button>
     );
 };
 
