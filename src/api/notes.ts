@@ -3,6 +3,22 @@ import { getUserData } from "@/helper/getUserData";
 import { makeHttpReq } from "@/helper/makeHttpReq";
 import type { NoteServerData } from "@/types/note-types";
 
+type UploadedNoteResponse = {
+  message: string;
+  note: {
+    _id: string;
+    files: Array<{
+      fileId: string;
+      filename: string;
+      originalName: string;
+      mimetype: string;
+      size: number;
+      extractedText?: string;
+    }>;
+  };
+  filesUploaded: number;
+};
+
 export async function getNotes(page = 1, search: string = ''): Promise<NoteServerData> {
   const data = await makeHttpReq('GET', `notes?page=${page}&search=${search}`) as NoteServerData
   return data
@@ -44,7 +60,7 @@ const downloadFile = async (fileId: string) => {
 
 
 // ✅ Upload selected google drive files
-export const uploadPickedFiles = async (docs: any[]) => {
+export const uploadPickedFiles = async (docs: any[]): Promise<UploadedNoteResponse> => {
 
   const formData = new FormData()
   const userData = getUserData()
@@ -80,10 +96,12 @@ export const uploadPickedFiles = async (docs: any[]) => {
     const data = await response.json()
 
     console.log("Upload success:", data)
+    return data as UploadedNoteResponse
 
   } catch (error) {
 
     console.error("Upload error:", error)
+    throw error
 
   }
 }

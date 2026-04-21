@@ -85,6 +85,7 @@ import { ClipboardMinus, HardDrive, Link2, Newspaper, Search, Youtube } from "lu
 import type { AppDispatch, RootState } from "@/store";
 import { useDispatch, useSelector } from "react-redux";
 import { toggleAddSourceNoteModal } from "@/store/addSourceSlice";
+import { setSelectedFiles as setChatSelectedFiles } from "@/store/chatSlice";
 import useDrivePicker from 'react-google-drive-picker'
 import { developerKey, googleClientId } from "@/config/get-env";
 import { getUserData } from "@/helper/getUserData";
@@ -98,10 +99,10 @@ const CreateNoteModal = () => {
     const dispatch = useDispatch<AppDispatch>();
     const { modal } = useSelector((state: RootState) => state.addSource);
     const userData = getUserData();
-    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [selectedFiles, setLocalSelectedFiles] = useState<File[]>([]);
     const [sources, setSources] = useState<any[]>([]);
     const [isUploading, setIsUploading] = useState(false);
-    const [openPicker, data, authResponse] = useDrivePicker();
+    const [openPicker, data] = useDrivePicker();
 
     // Fetch sources for all users (all files from all notes)
     const fetchSources = async () => {
@@ -132,12 +133,24 @@ const CreateNoteModal = () => {
     // Handle Google Drive file selection
     useEffect(() => {
         if (data?.action === "picked") {
-            setSelectedFiles([]); // Clear local files
+            setLocalSelectedFiles([]); // Clear local files
             setIsUploading(true);
-            uploadPickedFiles(data.docs).then(() => {
-                setIsUploading(false);
-                fetchSources();
-            });
+            uploadPickedFiles(data.docs)
+                .then((uploadResult) => {
+                    const uploadedFilesForChat = (uploadResult.note.files || []).map((file) => ({
+                        ...file,
+                        noteId: uploadResult.note._id,
+                    }));
+                    dispatch(setChatSelectedFiles(uploadedFilesForChat));
+                    fetchSources();
+                    dispatch(toggleAddSourceNoteModal());
+                })
+                .catch((error) => {
+                    console.error("Drive upload failed:", error);
+                })
+                .finally(() => {
+                    setIsUploading(false);
+                });
         }
         // eslint-disable-next-line
     }, [data]);
@@ -152,11 +165,22 @@ const CreateNoteModal = () => {
     const handleSaveFiles = async () => {
         if (selectedFiles.length === 0) return;
         setIsUploading(true);
-        const docs = selectedFiles.map(file => ({ id: URL.createObjectURL(file), name: file.name, file, isLocal: true }));
-        await uploadPickedFiles(docs);
-        setIsUploading(false);
-        setSelectedFiles([]);
-        fetchSources();
+        try {
+            const docs = selectedFiles.map(file => ({ id: URL.createObjectURL(file), name: file.name, file, isLocal: true }));
+            const uploadResult = await uploadPickedFiles(docs);
+            const uploadedFilesForChat = (uploadResult.note.files || []).map((file) => ({
+                ...file,
+                noteId: uploadResult.note._id,
+            }));
+            dispatch(setChatSelectedFiles(uploadedFilesForChat));
+            setLocalSelectedFiles([]);
+            fetchSources();
+            dispatch(toggleAddSourceNoteModal());
+        } catch (error) {
+            console.error("Local upload failed:", error);
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     return (
@@ -191,7 +215,7 @@ const CreateNoteModal = () => {
                     <p className="text-sm">Sources let NotebookLM base its responses on the information that matters most to you.
                         (Examples: marketing plans, course reading, research notes, meeting transcripts, sales documents, etc.)</p>
                 </div>
-                <FileUpload selectedFiles={selectedFiles} setSelectedFiles={setSelectedFiles} />
+                <FileUpload selectedFiles={selectedFiles} setSelectedFiles={setLocalSelectedFiles} />
                 {/* Uploaded sources display */}
                 <div className="mt-6">
                     <div className="font-semibold mb-2">Uploaded Sources:</div>
@@ -203,7 +227,10 @@ const CreateNoteModal = () => {
                                 <li
                                     key={file.fileId || idx}
                                     className="flex items-center gap-2 py-1 px-2 bg-white rounded mb-1 border cursor-pointer hover:bg-indigo-50"
-                                    onClick={() => alert(`Selected file: ${file.originalName || file.filename}\nReady for chat!`)}
+                                    onClick={() => {
+                                        dispatch(setChatSelectedFiles([file]));
+                                        dispatch(toggleAddSourceNoteModal());
+                                    }}
                                 >
                                     <span className="truncate max-w-xs">{file.originalName || file.filename}</span>
                                     <span className="text-xs text-gray-400">({file.mimetype})</span>

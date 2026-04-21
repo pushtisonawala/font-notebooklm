@@ -10,6 +10,7 @@ import { getNotes } from "@/api/notes";
 const LeftPanel = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { leftPanelOpen } = useSelector((state: RootState) => state.chat);
+  const isAddSourceModalOpen = useSelector((state: RootState) => state.addSource.modal);
   const [sources, setSources] = useState<any[]>([]);
   const selectedFiles = useSelector((state: RootState) => state.chat.selectedFiles);
 
@@ -33,7 +34,7 @@ const LeftPanel = () => {
     };
     if (leftPanelOpen) fetchSources();
     // eslint-disable-next-line
-  }, [leftPanelOpen]);
+  }, [leftPanelOpen, isAddSourceModalOpen]);
 
   // Handle file selection
   const handleFileClick = (file: any) => {
