@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch, RootState } from "@/store";
 import { addExtraWidth, reduceExtraWidth, setActiveStudioTool, toggleRightPanel } from "@/store/chatSlice";
 import { STUDIO_TOOLS, type StudioToolLabel } from "@/config/studio-tools";
+import { useNavigate } from "react-router";
 
 const TOOL_ICONS: Record<StudioToolLabel, ReactNode> = {
     "Audio Overview": <Sparkles />,
@@ -19,7 +20,23 @@ const TOOL_ICONS: Record<StudioToolLabel, ReactNode> = {
 const RightPanel = () => {
 
     const dispatch = useDispatch<AppDispatch>();
-    const { rightPanelOpen, activeStudioTool } = useSelector((state: RootState) => state.chat);
+    const navigate = useNavigate();
+    const { rightPanelOpen, activeStudioTool, selectedFiles } = useSelector((state: RootState) => state.chat);
+    const noteId = (selectedFiles[0] as { noteId?: string } | undefined)?.noteId;
+
+    const openQuizPage = () => {
+        dispatch(setActiveStudioTool(null));
+        navigate(noteId ? `/quiz?noteId=${noteId}` : "/quiz");
+    };
+
+    const handleToolClick = (toolLabel: StudioToolLabel) => {
+        if (toolLabel === "Quiz") {
+            openQuizPage();
+            return;
+        }
+
+        dispatch(setActiveStudioTool(activeStudioTool === toolLabel ? null : toolLabel));
+    };
 
     function togglePanel() {
         if (rightPanelOpen) {
@@ -61,11 +78,34 @@ const RightPanel = () => {
                         rightPanelOpen={rightPanelOpen}
                         icon={TOOL_ICONS[tool.label]}
                         label={tool.label}
-                        isActive={activeStudioTool === tool.label}
-                        onClick={() => dispatch(setActiveStudioTool(activeStudioTool === tool.label ? null : tool.label))}
+                        isActive={tool.label === "Quiz" ? false : activeStudioTool === tool.label}
+                        onClick={() => handleToolClick(tool.label)}
                     />
                 ))}
             </div>
+
+            {rightPanelOpen && (
+                <button
+                    type="button"
+                    onClick={openQuizPage}
+                    className="mt-6 w-full rounded-3xl border border-sky-200 bg-gradient-to-r from-sky-50 via-white to-fuchsia-50 px-4 py-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Quiz Arena</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">Open adaptive quiz mode</p>
+                            <p className="mt-1 text-xs leading-5 text-slate-600">
+                                {noteId
+                                    ? "Use the latest saved quiz for the selected notebook."
+                                    : "Pick a source first, then launch the immersive quiz page."}
+                            </p>
+                        </div>
+                        <div className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700">
+                            /quiz
+                        </div>
+                    </div>
+                </button>
+            )}
 
             {/* Bottom note button */}
             <div className="mt-6 flex justify-center">

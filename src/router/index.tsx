@@ -2,10 +2,14 @@
 
 
 import { lazy } from "react";
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import NotFoundPage from "@/pages/404/NotFoundPage";
 
 export const router = createBrowserRouter([
+    {
+        path:'/',
+        element:<Navigate to="/notes" replace />,
+    },
     {
         path:'/auth',
          Component:lazy(() => import("@/layouts/AuthLayout")),
@@ -29,6 +33,10 @@ export const router = createBrowserRouter([
                  Component:lazy(() => import("@/pages/chat/ChatPage")),
             }
          ]
+    },
+    {
+        path:'/quiz',
+         Component:lazy(() => import("@/pages/quiz/QuizPage")),
     },
      {
         path:'/notes',

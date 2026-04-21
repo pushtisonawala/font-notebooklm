@@ -400,6 +400,10 @@ const chatMessageSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  toolUsed: {
+    type: String,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -735,14 +739,16 @@ app.post('/api/v1/chat/:noteId', async (req, res) => {
       noteId,
       userId: userId || note.userId,
       role: 'user',
-      content: message
+      content: message,
+      toolUsed: activeTool || null
     });
 
     await ChatMessage.create({
       noteId,
       userId: userId || note.userId,
       role: 'assistant',
-      content: assistantMessage
+      content: assistantMessage,
+      toolUsed: activeTool || null
     });
 
     res.json({

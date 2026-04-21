@@ -4,6 +4,9 @@ import type { StudioToolLabel } from "@/config/studio-tools";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useSelector } from "react-redux";
+import { useNavigate } from "react-router";
+import type { RootState } from "@/store";
 
 type ToolResponseRendererProps = {
     toolUsed: string;
@@ -32,6 +35,10 @@ type QuizQuestion = {
     prompt: string;
     options: { label: string; text: string }[];
     correctAnswer?: string;
+};
+
+type SelectedSource = {
+    noteId?: string;
 };
 
 type ReportSection = {
@@ -777,6 +784,9 @@ const FlashcardsCard = ({ content }: { content: string }) => {
 };
 
 const QuizCard = ({ content }: { content: string }) => {
+    const navigate = useNavigate();
+    const selectedFiles = useSelector((state: RootState) => state.chat.selectedFiles as SelectedSource[]);
+    const noteId = selectedFiles[0]?.noteId;
     const questions = parseQuizQuestions(content);
 
     if (questions.length === 0) {
@@ -785,6 +795,28 @@ const QuizCard = ({ content }: { content: string }) => {
 
     return (
         <ToolShell tool="Quiz">
+            <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-white/90 p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+                <div>
+                    <p className="text-sm font-semibold text-slate-900">Adaptive quiz mode</p>
+                    <p className="text-xs leading-5 text-slate-600">
+                        Launch the full-screen quiz page to get adaptive difficulty, emotion feedback, and a results dashboard.
+                    </p>
+                </div>
+                <Button
+                    type="button"
+                    onClick={() =>
+                        navigate(noteId ? `/quiz?noteId=${noteId}` : "/quiz", {
+                            state: {
+                                noteId,
+                                quizContent: content,
+                            },
+                        })
+                    }
+                    className="rounded-full bg-emerald-600 text-white hover:bg-emerald-700"
+                >
+                    Open adaptive quiz
+                </Button>
+            </div>
             <div className="space-y-4">
                 {questions.map((question, index) => (
                     <div key={`${question.prompt.slice(0, 24)}-${index}`} className="rounded-2xl border border-emerald-100 bg-white/95 p-4 shadow-sm">
